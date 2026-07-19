@@ -7,7 +7,9 @@
 
 import type { ReactElement } from 'react';
 import { useTrack } from '../../hooks/useTrack';
+import { useLongPress } from '../../hooks/useLongPress';
 import { useReaper } from '../ReaperProvider';
+import { useReaperStore } from '../../store';
 import { track as trackCmd } from '../../core/WebSocketCommands';
 import {
   MuteButton,
@@ -54,6 +56,26 @@ export function MixerStripCompact({
 }: MixerStripCompactProps): ReactElement | null {
   const { exists, name, isSelected, color, guid } = useTrack(trackIndex);
   const { sendCommand } = useReaper();
+  const openFxView = useReaperStore((s) => s.openFxView);
+
+  // Toggle track selection in REAPER when tapping name
+  const handleToggleSelectInReaper = () => {
+    sendCommand(trackCmd.setSelected(trackIndex, isSelected ? 0 : 1, guid));
+  };
+
+  // Name button: tap = select in REAPER, long-press = open this track's FX view
+  const { handlers: nameHandlers } = useLongPress({
+    onTap: handleToggleSelectInReaper,
+    onLongPress: () => {
+      if (!guid) return;
+      openFxView({
+        trackIndex,
+        trackGuid: guid,
+        trackName: name || (trackIndex === 0 ? 'MASTER' : `Track ${trackIndex}`),
+      });
+    },
+    duration: 500,
+  });
 
   if (!exists) {
     return null;
@@ -62,11 +84,6 @@ export function MixerStripCompact({
   const isMaster = trackIndex === 0;
   const backgroundColor = isSelected ? 'bg-bg-elevated' : 'bg-bg-surface';
   const topBarColor = color || 'var(--color-text-muted)';
-
-  // Toggle track selection in REAPER when tapping name
-  const handleToggleSelectInReaper = () => {
-    sendCommand(trackCmd.setSelected(trackIndex, isSelected ? 0 : 1, guid));
-  };
 
   return (
     <div
@@ -87,13 +104,13 @@ export function MixerStripCompact({
         )}
       </div>
 
-      {/* Track name - tappable to toggle selection in REAPER */}
+      {/* Track name - tap to toggle selection in REAPER, long-press to open FX */}
       <button
-        onClick={handleToggleSelectInReaper}
-        className={`w-full text-center text-[10px] font-medium truncate px-1 py-0.5 hover:bg-bg-elevated/50 transition-colors ${
+        {...nameHandlers}
+        className={`w-full text-center text-[10px] font-medium truncate px-1 py-0.5 hover:bg-bg-elevated/50 transition-colors touch-none select-none ${
           isSelected ? 'bg-bg-elevated/30' : ''
         }`}
-        title={`${name || (isMaster ? 'MASTER' : `Trk ${trackIndex}`)} - tap to ${isSelected ? 'deselect' : 'select'}`}
+        title={`${name || (isMaster ? 'MASTER' : `Trk ${trackIndex}`)} - tap to ${isSelected ? 'deselect' : 'select'}, hold for FX`}
         style={color ? { color } : undefined}
       >
         {isMaster ? 'MASTER' : name || `Trk ${trackIndex}`}
