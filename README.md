@@ -1,5 +1,9 @@
 # REAmo
 
+> **Fork notice** — this is a personal fork of [conormkelly/reamo](https://github.com/conormkelly/reamo)
+> with some booth-focused timeline/FX tweaks. See [Changes in this fork](#changes-in-this-fork).
+> The Zig backend/extension is unchanged; all changes are in the React frontend.
+
 A wireless, zero-config all-in-one control surface for [REAPER](https://www.reaper.fm/).
 
 Transport, mixer, timeline, tuner, instruments, notes — all from your phone or tablet. Supports WiFi and USB.
@@ -7,6 +11,21 @@ Transport, mixer, timeline, tuner, instruments, notes — all from your phone or
 <p align="center">
   <img src="screenshots/reamo-combined.gif" alt="REAmo in action" width="280" />
 </p>
+
+## Changes in this fork
+
+Frontend-only tweaks aimed at operating REAPER hands-on from a vocal booth. The Zig
+extension/backend is untouched — rebuild with `make frontend` and reload REAPER.
+
+- **Timeline ruler = tap-to-seek.** Tap anywhere on the ruler to move the playhead there.
+  The playhead handle is now a display-only indicator (no more fiddly drag-to-grab).
+- **Free-hand loop / time selection.** Drag a finger across the track region to set the
+  time selection directly. Grid/boundary snapping is removed — selections are free-hand.
+  (Trade-off: drag-to-pan in the track area is disabled; use pinch to zoom/pan.)
+- **Long-press a track lane → FX view.** Press and hold a track's lane in the timeline to
+  open that track's FX chain (bypass, presets, per-plugin parameter editing, add FX) —
+  no more digging through the mixer. Backed by a small global `fxView` store slice +
+  `FxViewHost`, so the FX view can be summoned from anywhere.
 
 ## Quick Start
 
