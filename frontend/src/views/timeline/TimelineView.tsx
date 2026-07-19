@@ -13,8 +13,7 @@
  */
 
 import { useMemo, useState, useCallback, useRef, useEffect, type ReactElement } from 'react';
-import { Info, Wrench } from 'lucide-react';
-import { ViewHeader, ViewLayout, Toolbar, ToolbarHeaderControls, SecondaryPanel, type SecondaryPanelTabConfig, type BankNavProps, type SearchProps } from '../../components';
+import { ViewHeader, ViewLayout, Toolbar, ToolbarHeaderControls } from '../../components';
 import {
   Timeline,
   RegionInfoBar,
@@ -108,7 +107,11 @@ export function TimelineView(): ReactElement {
   // Get skeleton from hook (same pattern as Mixer)
   const { skeleton } = useTrackSkeleton();
 
-  // Bank navigation - pages through tracks in groups of laneCount
+  // Show ALL tracks as lanes in a single bank (no paging). Making the bank large
+  // enough to hold every track collapses paging to one page.
+  const bankSize = Math.max(laneCount, totalTracks + 1);
+
+  // Bank navigation - collapsed to a single all-tracks bank
   // Destructure to get stable function references (like MixerView does)
   const {
     trackIndices: bankTrackIndices,
@@ -121,7 +124,7 @@ export function TimelineView(): ReactElement {
     bankDisplay,
     totalCount,
   } = useBankNavigation({
-    channelCount: laneCount,
+    channelCount: bankSize,
     totalTracks,
     storageKey: 'reamo-timeline-bank',
   });
@@ -266,10 +269,10 @@ export function TimelineView(): ReactElement {
     }
   }, [folderPath, validatePath, handleSetFolderPath]);
 
-  // Calculate filtered banking
-  const filteredBankStart = filterBankIndex * laneCount;
-  const filteredBankEnd = Math.min(filteredBankStart + laneCount, allFilteredIndices.length);
-  const filteredTotalBanks = Math.ceil(allFilteredIndices.length / laneCount);
+  // Calculate filtered banking (single all-tracks bank → shows every match)
+  const filteredBankStart = filterBankIndex * bankSize;
+  const filteredBankEnd = Math.min(filteredBankStart + bankSize, allFilteredIndices.length);
+  const filteredTotalBanks = Math.ceil(allFilteredIndices.length / bankSize);
 
   // Get the track indices to display (filtered or regular bank)
   const displayTrackIndices = useMemo(() => {
@@ -511,30 +514,6 @@ export function TimelineView(): ReactElement {
     </ViewHeader>
   );
 
-  // Info tab content - changes based on mode
-  const infoTabContent = useMemo(() => {
-    if (timelineMode === 'regions') {
-      // Regions mode: editable region info in info tab (consistent with navigate mode)
-      return <RegionInfoBar onAddRegion={openAddRegionModal} />;
-    } else {
-      // Navigate mode: show marker/item info or fallback
-      return (
-        <section data-testid="navigate-info-section" className="flex flex-col gap-2">
-          <MarkerInfoBar />
-          {selectedMarkerId === null && itemSelectionModeActive && <NavigateItemInfoBar />}
-          {selectedMarkerId === null && !itemSelectionModeActive && (
-            <div
-              data-testid="nothing-selected-message"
-              className="px-3 py-2 text-text-muted text-sm text-center"
-            >
-              Tap a marker pill or item
-            </div>
-          )}
-        </section>
-      );
-    }
-  }, [timelineMode, openAddRegionModal, selectedMarkerId, itemSelectionModeActive]);
-
   // Info content for side rail (landscape - vertical layout)
   const sideRailInfoContent = useMemo(() => {
     if (timelineMode === 'regions') {
@@ -561,18 +540,6 @@ export function TimelineView(): ReactElement {
     }
   }, [timelineMode, openAddRegionModal, selectedMarkerId, itemSelectionModeActive]);
 
-  // Toolbar tab content (portrait footer - horizontal layout)
-  const toolbarTabContent = useMemo(() => (
-    <div className="flex flex-col h-full">
-      <div className="px-3 py-1">
-        <ToolbarHeaderControls />
-      </div>
-      <div className="flex-1 min-h-0">
-        <Toolbar layout="horizontal" />
-      </div>
-    </div>
-  ), []);
-
   // Toolbar content for side rail (landscape - vertical layout)
   const sideRailToolbarContent = useMemo(() => (
     <div className="flex flex-col h-full">
@@ -581,35 +548,8 @@ export function TimelineView(): ReactElement {
     </div>
   ), []);
 
-  // Secondary panel tab configuration - Info and Toolbar (filter/nav now in header)
-  const secondaryTabs: SecondaryPanelTabConfig[] = useMemo(() => [
-    {
-      id: 'info',
-      icon: Info,
-      label: 'Info',
-      content: infoTabContent,
-    },
-    {
-      id: 'toolbar',
-      icon: Wrench,
-      label: 'Toolbar',
-      content: toolbarTabContent,
-    },
-  ], [infoTabContent, toolbarTabContent]);
-
-  // Bank navigation props for SecondaryPanel header
-  // Use filtered count when filtering, otherwise use bank total count
+  // Filtered count when filtering, otherwise the bank total count (used by side rail)
   const effectiveTotalCount = isFiltered ? allFilteredIndices.length : totalCount;
-  const bankNavProps: BankNavProps = useMemo(() => ({
-    bankDisplay: effectiveBankDisplay,
-    compactDisplay: String(effectiveTotalCount),
-    canGoBack: effectiveCanGoBack,
-    canGoForward: effectiveCanGoForward,
-    onBack: handleBankBack,
-    onForward: handleBankForward,
-    onHoldStart: handleHoldStart,
-    onHoldEnd: handleHoldEnd,
-  }), [effectiveBankDisplay, effectiveTotalCount, effectiveCanGoBack, effectiveCanGoForward, handleBankBack, handleBankForward, handleHoldStart, handleHoldEnd]);
 
   // Sync bank nav state to side rail when in landscape-constrained mode
   useEffect(() => {
@@ -656,34 +596,12 @@ export function TimelineView(): ReactElement {
     };
   }, [isLandscapeConstrained, effectiveBankDisplay, effectiveTotalCount, effectiveCanGoBack, effectiveCanGoForward, handleBankBack, handleBankForward, handleHoldStart, handleHoldEnd, setSideRailBankNav, setSideRailBankNavCallbacks, setSideRailInfo, setSideRailToolbar, setSideRailSearch, sideRailInfoContent, sideRailToolbarContent, filterQuery, handleSetFilterQuery]);
 
-  // Search props for SecondaryPanel header
-  const searchProps: SearchProps = useMemo(() => ({
-    value: filterQuery,
-    onChange: handleSetFilterQuery,
-    placeholder: 'Filter tracks...',
-  }), [filterQuery, handleSetFilterQuery]);
-
-  // Footer content - SecondaryPanel with search and bank nav in header
-  // Regions mode gets a taller panel so region editing controls aren't clipped
-  const footerContent = (
-    <SecondaryPanel
-      viewId="timeline"
-      tabs={secondaryTabs}
-      bankNav={bankNavProps}
-      search={searchProps}
-    />
-  );
-
-  // Combined footer: secondary panel (portrait only)
-  const combinedFooter = isLandscapeConstrained ? undefined : footerContent;
-
   return (
     <>
       <ViewLayout
         viewId="timeline"
         className="bg-bg-app text-text-primary p-view"
         header={headerContent}
-        footer={combinedFooter}
         scrollable={false}
       >
         {/* Main timeline area - containerRef for height measurement */}
