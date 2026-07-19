@@ -22,10 +22,10 @@ extension/backend is untouched — rebuild with `make frontend` and reload REAPE
 - **Free-hand loop / time selection.** Drag a finger across the track region to set the
   time selection directly. Grid/boundary snapping is removed — selections are free-hand.
   (Trade-off: drag-to-pan in the track area is disabled; use pinch to zoom/pan.)
-- **Long-press a track lane → FX view.** Press and hold a track's lane in the timeline to
-  open that track's FX chain (bypass, presets, per-plugin parameter editing, add FX) —
-  no more digging through the mixer. Backed by a small global `fxView` store slice +
-  `FxViewHost`, so the FX view can be summoned from anywhere.
+- **Long-press → FX view.** Press and hold a track — either its **lane in the timeline**
+  or its **name in the mixer** — to open that track's FX chain (bypass, presets, per-plugin
+  parameter editing, add FX). No more digging through nested menus. Backed by a small global
+  `fxView` store slice + `FxViewHost`, so the FX view can be summoned from anywhere.
 
 ## Quick Start
 
