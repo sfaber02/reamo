@@ -697,6 +697,35 @@ export function TimelineView(): ReactElement {
               multiTrackIndices={displayTrackIndices}
             />
 
+            {/* Persistent per-lane labels (track number + name) at the left edge */}
+            {laneTracks.length > 0 && (
+              <div
+                className="absolute inset-0 pointer-events-none z-20"
+                style={{ top: 57 }} // Skip ruler (32px) + region labels bar (25px)
+              >
+                {laneTracks.map((track, laneIdx) => {
+                  const trackIdx = displayTrackIndices[laneIdx];
+                  const laneHeight = timelineHeight / laneTracks.length;
+                  return (
+                    <div
+                      key={track.g}
+                      className="absolute left-0 flex items-start"
+                      style={{ top: laneIdx * laneHeight }}
+                    >
+                      <div className="m-0.5 flex items-center gap-1 rounded bg-bg-deep/75 backdrop-blur-sm px-1.5 py-0.5 max-w-[55vw]">
+                        <span className="text-[9px] font-bold text-text-secondary tabular-nums">
+                          {trackIdx}
+                        </span>
+                        <span className="text-[10px] font-medium text-text-primary truncate">
+                          {track.n || `Track ${trackIdx}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Track labels overlay - shown when holding bank display or switching banks */}
             {showTrackLabels && laneTracks.length > 0 && (
               <div
