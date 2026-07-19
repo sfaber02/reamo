@@ -1,9 +1,9 @@
 /**
  * Zoom Controls Component
- * Compact zoom button that reveals zoom in/out buttons on tap
+ * Always-visible inline zoom: [−] duration [＋] [fit]
  */
 
-import { useState, useRef, useEffect, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { ZoomOut, ZoomIn, Maximize2 } from 'lucide-react';
 import { formatZoomDuration } from '../../utils/timelineTicks';
 
@@ -27,91 +27,35 @@ export function ZoomControls({
   onFitToContent,
   className = '',
 }: ZoomControlsProps): ReactElement {
-  const [isOpen, setIsOpen] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  // Close popover when clicking outside
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(target) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(target)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  const zoomButtonStyle =
-    'p-3 rounded-lg transition-colors touch-none text-text-secondary hover:bg-bg-hover active:bg-bg-surface';
+  const btn =
+    'p-2 rounded-lg transition-colors touch-none text-text-tertiary hover:bg-bg-hover hover:text-text-secondary active:bg-bg-surface';
 
   return (
-    <div className={`relative flex items-center gap-1 ${className}`}>
-      {/* Compact zoom button */}
-      <button
-        ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex flex-col items-center p-1.5 rounded-lg transition-colors touch-none text-text-tertiary hover:bg-bg-hover hover:text-text-secondary active:bg-bg-surface"
-        title="Zoom controls"
-        aria-label="Open zoom controls"
-        aria-expanded={isOpen}
-      >
-        <span className="text-[10px] font-medium leading-tight">Zoom</span>
-        <span className="text-[10px] font-medium tabular-nums leading-tight">
-          {formatZoomDuration(visibleDuration)}
-        </span>
+    <div className={`flex items-center gap-0.5 ${className}`}>
+      <button onClick={onZoomOut} className={btn} title="Zoom out" aria-label="Zoom out">
+        <ZoomOut size={18} />
       </button>
 
-      {/* Zoom buttons popover */}
-      {isOpen && (
-        <div
-          ref={popoverRef}
-          className="absolute bottom-full right-0 mb-2 flex flex-col items-center bg-bg-elevated rounded-lg shadow-lg border border-border-subtle p-1"
-        >
-          <button
-            onClick={onZoomIn}
-            className={zoomButtonStyle}
-            title="Zoom in"
-            aria-label="Zoom in"
-          >
-            <ZoomIn size={20} />
-          </button>
-          <button
-            onClick={onZoomOut}
-            className={zoomButtonStyle}
-            title="Zoom out"
-            aria-label="Zoom out"
-          >
-            <ZoomOut size={20} />
-          </button>
-        </div>
-      )}
+      <span
+        className="min-w-[3ch] text-center text-[10px] font-medium tabular-nums text-text-tertiary select-none"
+        aria-live="polite"
+        title="Visible duration"
+      >
+        {formatZoomDuration(visibleDuration)}
+      </span>
 
-      {/* Fit to content */}
+      <button onClick={onZoomIn} className={btn} title="Zoom in" aria-label="Zoom in">
+        <ZoomIn size={18} />
+      </button>
+
       {onFitToContent && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onFitToContent();
-          }}
-          className="p-1.5 rounded transition-colors touch-none text-text-tertiary hover:bg-bg-hover hover:text-text-secondary active:bg-bg-surface"
+          onClick={onFitToContent}
+          className={btn}
           title="Fit to content"
           aria-label="Fit to content"
         >
-          <Maximize2 size={16} />
+          <Maximize2 size={18} />
         </button>
       )}
     </div>

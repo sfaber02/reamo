@@ -22,6 +22,8 @@ extension/backend is untouched — rebuild with `make frontend` and reload REAPE
 - **Free-hand loop / time selection.** Drag a finger across the track region to set the
   time selection directly. Grid/boundary snapping is removed — selections are free-hand.
   (Trade-off: drag-to-pan in the track area is disabled; use pinch to zoom/pan.)
+- **Always-visible zoom.** The timeline footer now shows inline `[−] duration [＋] [fit]`
+  buttons instead of hiding zoom in/out behind a popover (two-finger pinch still works too).
 - **Long-press → FX view.** Press and hold a track — either its **lane in the timeline**
   or its **name in the mixer** — to open that track's FX chain (bypass, presets, per-plugin
   parameter editing, add FX). No more digging through nested menus. Backed by a small global
