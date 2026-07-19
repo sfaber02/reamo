@@ -3,7 +3,7 @@
  * Visual timeline showing regions and markers for navigation and selection
  */
 
-import { useRef, useCallback, useMemo, type ReactElement } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
 import { useReaper } from '../ReaperProvider';
 import { useReaperStore } from '../../store';
 import {
@@ -87,6 +87,9 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Live preview of a time selection being dragged on the ruler
+  const [rulerSelectionPreview, setRulerSelectionPreview] = useState<{ start: number; end: number } | null>(null);
+
   // Viewport, follow-playhead, coordinate conversion, pan/pinch gestures
   const {
     viewport, containerWidth,
@@ -138,6 +141,37 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
     timeToPercent: viewportTimeToPercent,
     onSeek: handlePlayheadSeek,
   });
+
+  // Mouse-wheel / trackpad zoom + horizontal scroll on the track region.
+  // Vertical wheel = zoom at cursor; horizontal wheel = pan/scroll.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        // Horizontal scroll = pan
+        e.preventDefault();
+        pauseFollow();
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0) return;
+        const secPerPx = viewport.visibleDuration / rect.width;
+        const shift = e.deltaX * secPerPx;
+        viewport.setVisibleRange({
+          start: viewport.visibleRange.start + shift,
+          end: viewport.visibleRange.end + shift,
+        });
+      } else if (e.deltaY !== 0) {
+        // Vertical wheel / pinch = zoom, centered on the cursor
+        e.preventDefault();
+        pauseFollow();
+        const centerOn = positionToTime(e.clientX);
+        if (e.deltaY < 0) viewport.zoomIn(centerOn);
+        else viewport.zoomOut(centerOn);
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [viewport, positionToTime, pauseFollow]);
 
   // Render-specific timeToPercent (uses VIEWPORT bounds for visible range)
   const renderTimeToPercent = useCallback(
@@ -304,6 +338,9 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
       onTrackLongPress: handleTrackLongPress,
     });
 
+  // Selection preview to render: ruler drag takes precedence over regions-mode canvas drag
+  const activeSelectionPreview = rulerSelectionPreview ?? selectionPreview;
+
   // Marker drag hook
   const handleMarkerMoveFromDrag = useCallback(
     (markerId: number, newPositionSeconds: number) => {
@@ -416,6 +453,8 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
         bpm={bpm ?? 120}
         timesigNum={beatsPerBar}
         timesigDenom={denominator}
+        onSetTimeSelection={setTimeSelection}
+        onSelectionPreview={setRulerSelectionPreview}
       />
 
       {/* Region labels bar (color bar + text) + playhead preview pill */}
@@ -509,13 +548,13 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
         />
 
         {/* Selection Preview */}
-        {selectionPreview && (
+        {activeSelectionPreview && (
           <div
             data-testid="selection-preview"
             className="absolute top-0 bottom-0 bg-selection-preview border-l-2 border-r-2 border-selection-border pointer-events-none"
             style={{
-              left: `${renderTimeToPercent(selectionPreview.start)}%`,
-              width: `${renderTimeToPercent(selectionPreview.end) - renderTimeToPercent(selectionPreview.start)}%`,
+              left: `${renderTimeToPercent(activeSelectionPreview.start)}%`,
+              width: `${renderTimeToPercent(activeSelectionPreview.end) - renderTimeToPercent(activeSelectionPreview.start)}%`,
             }}
           />
         )}

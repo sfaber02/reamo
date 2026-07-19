@@ -81,7 +81,14 @@ interface Props {
   bpm: number;
   timesigNum: number;
   timesigDenom: number;
+  /** Commit a time selection (drag on the ruler) */
+  onSetTimeSelection?: (start: number, end: number) => void;
+  /** Live preview of the selection being dragged (null clears it) */
+  onSelectionPreview?: (range: { start: number; end: number } | null) => void;
 }
+
+// Movement (px) beyond which a ruler press is a selection drag rather than a tap
+const RULER_DRAG_THRESHOLD = 6;
 
 export function TimelineRuler({
   renderTimeToPercent,
@@ -92,22 +99,72 @@ export function TimelineRuler({
   bpm,
   timesigNum,
   timesigDenom,
+  onSetTimeSelection,
+  onSelectionPreview,
 }: Props): ReactElement {
   const { sendCommand } = useReaper();
   const rulerRef = useRef<HTMLDivElement>(null);
+  const dragStartTimeRef = useRef<number | null>(null);
+  const dragStartXRef = useRef(0);
+  const draggedRef = useRef(false);
 
-  // Tap anywhere on the ruler seeks the playhead to that position (free-hand, no snap).
-  const handleRulerTap = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
+  const timeFromClientX = useCallback(
+    (clientX: number) => {
       const el = rulerRef.current;
-      if (!el) return;
+      if (!el) return 0;
       const rect = el.getBoundingClientRect();
-      if (rect.width === 0) return;
-      const ratio = (e.clientX - rect.left) / rect.width;
-      const time = visibleRange.start + ratio * visibleDuration;
-      sendCommand(transport.seek(Math.max(0, time)));
+      if (rect.width === 0) return 0;
+      const ratio = (clientX - rect.left) / rect.width;
+      return Math.max(0, visibleRange.start + ratio * visibleDuration);
     },
-    [sendCommand, visibleRange.start, visibleDuration]
+    [visibleRange.start, visibleDuration]
+  );
+
+  // Ruler: tap = seek, drag = free-hand time selection (no snap)
+  const handleRulerPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      dragStartTimeRef.current = timeFromClientX(e.clientX);
+      dragStartXRef.current = e.clientX;
+      draggedRef.current = false;
+      try {
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      } catch { /* ignore */ }
+    },
+    [timeFromClientX]
+  );
+
+  const handleRulerPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (dragStartTimeRef.current === null) return;
+      if (!draggedRef.current && Math.abs(e.clientX - dragStartXRef.current) < RULER_DRAG_THRESHOLD) return;
+      draggedRef.current = true;
+      const t = timeFromClientX(e.clientX);
+      onSelectionPreview?.({
+        start: Math.min(dragStartTimeRef.current, t),
+        end: Math.max(dragStartTimeRef.current, t),
+      });
+    },
+    [timeFromClientX, onSelectionPreview]
+  );
+
+  const handleRulerPointerUp = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const start = dragStartTimeRef.current;
+      dragStartTimeRef.current = null;
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch { /* ignore */ }
+      if (start === null) return;
+      if (draggedRef.current) {
+        const t = timeFromClientX(e.clientX);
+        onSelectionPreview?.(null);
+        onSetTimeSelection?.(Math.min(start, t), Math.max(start, t));
+      } else {
+        sendCommand(transport.seek(start));
+      }
+      draggedRef.current = false;
+    },
+    [timeFromClientX, onSelectionPreview, onSetTimeSelection, sendCommand]
   );
 
   const ticks = useMemo(
@@ -139,8 +196,11 @@ export function TimelineRuler({
       ref={rulerRef}
       data-testid="timeline-ruler"
       className="relative h-[32px] bg-bg-deep rounded-t-lg overflow-hidden cursor-pointer touch-none select-none"
-      onPointerDown={handleRulerTap}
-      aria-label="Timeline ruler — tap to move playhead"
+      onPointerDown={handleRulerPointerDown}
+      onPointerMove={handleRulerPointerMove}
+      onPointerUp={handleRulerPointerUp}
+      onPointerCancel={handleRulerPointerUp}
+      aria-label="Timeline ruler — tap to seek, drag to select"
     >
       {ticks.map((tick) => {
         const leftPercent = renderTimeToPercent(tick.time);

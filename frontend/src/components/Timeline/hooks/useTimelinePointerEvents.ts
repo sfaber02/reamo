@@ -1,11 +1,14 @@
 /**
  * useTimelinePointerEvents — Gesture routing for the timeline canvas
  *
- * Manages handlePointerDown, handlePointerMove, handlePointerUp and their
- * shared state (dragStart, dragEnd, isCancelled, panStartPositionRef).
- * Routes pointer events to the correct handler based on timeline mode:
- * pinch (always), region editing, pan/tap (navigate), or selection drag.
- * Also computes the selectionPreview bounds during active selection drags.
+ * Navigate mode (the track region):
+ *   - 1-finger drag = pan/scroll
+ *   - pinch = zoom
+ *   - tap = select item under finger
+ *   - long-press = open that track's FX view
+ * Time selection is handled by the ruler, NOT the track region.
+ *
+ * Regions mode keeps its own editing/selection handlers (unchanged).
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect, type RefObject } from 'react';
@@ -74,8 +77,7 @@ export function useTimelinePointerEvents({
   findNearestBoundary,
   onTrackLongPress,
 }: UseTimelinePointerEventsParams): UseTimelinePointerEventsReturn {
-  // Gesture state (navigate mode)
-  // Simplified: tap = seek, horizontal drag = select, vertical drag off = cancel
+  // Selection drag state (regions mode only)
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);
   const [isCancelled, setIsCancelled] = useState(false);
@@ -88,12 +90,15 @@ export function useTimelinePointerEvents({
   const longPressFiredRef = useRef(false);
   const longPressPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Clear any pending long-press timer on unmount
-  useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    };
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   }, []);
+
+  // Clear any pending long-press timer on unmount
+  useEffect(() => cancelLongPress, [cancelLongPress]);
 
   // Handle touch/mouse start
   const handlePointerDown = useCallback(
@@ -101,45 +106,31 @@ export function useTimelinePointerEvents({
       // Always track pinch pointers (works in all modes)
       const pinchStarted = pinchGesture.handlePointerDown(e);
       if (pinchStarted) {
-        // isPinchingRef is already set to true inside the hook
-        // Don't pause follow when following playhead - zoom is already centered on it
-        if (!followPlayhead) {
-          pauseFollow();
-        }
+        cancelLongPress();
+        if (!followPlayhead) pauseFollow();
         return; // Pinch takes priority
       }
 
-      // Don't start timeline selection if dragging playhead
+      // Don't start a gesture while the playhead is being dragged
       if (isDraggingPlayhead) return;
 
-      // Region editing mode - delegate to hook if handlers provided, otherwise fall through to pan/tap
+      // Region editing mode - delegate to hook if handlers provided
       if (timelineMode === 'regions' && handleRegionPointerDown) {
         handleRegionPointerDown(e);
         return;
       }
 
-      // Navigate mode: free-hand time-selection drag (drag = loop, tap = item).
-      // Pan-by-drag is intentionally disabled here so a finger drag on the track
-      // region sets the loop directly.
+      // Navigate mode: pan/scroll the track region (+ tap = item, long-press = FX)
       if (timelineMode === 'navigate') {
         panStartPositionRef.current = { x: e.clientX, y: e.clientY };
-        const time = positionToTime(e.clientX);
-        setDragStart(time);
-        setDragEnd(time);
-        setIsCancelled(false);
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        panGesture.handlePointerDown(e);
 
-        // Start long-press timer: holding still (no drag) opens the track's FX view
         longPressFiredRef.current = false;
         longPressPosRef.current = { x: e.clientX, y: e.clientY };
-        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        cancelLongPress();
         longPressTimerRef.current = setTimeout(() => {
           longPressFiredRef.current = true;
           longPressTimerRef.current = null;
-          // Abandon the nascent selection drag so no loop is created
-          setDragStart(null);
-          setDragEnd(null);
-          setIsCancelled(false);
           onTrackLongPress?.(longPressPosRef.current.x, longPressPosRef.current.y);
         }, LONG_PRESS_MS);
         return;
@@ -148,21 +139,18 @@ export function useTimelinePointerEvents({
       // Regions mode without drag handlers - original pan/tap or selection behavior
       if (timelineMode === 'regions') {
         if (!selectionModeActive) {
-          // Pan mode (default) - track start position for tap detection, then delegate
           panStartPositionRef.current = { x: e.clientX, y: e.clientY };
           panGesture.handlePointerDown(e);
           return;
         }
-        // Selection mode - time selection gesture
         const time = positionToTime(e.clientX);
         setDragStart(time);
         setDragEnd(time);
         setIsCancelled(false);
-        // Capture pointer for drag events
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
       }
     },
-    [positionToTime, isDraggingPlayhead, timelineMode, handleRegionPointerDown, selectionModeActive, panGesture, pinchGesture, pauseFollow, followPlayhead, onTrackLongPress]
+    [positionToTime, isDraggingPlayhead, timelineMode, handleRegionPointerDown, selectionModeActive, panGesture, pinchGesture, pauseFollow, followPlayhead, onTrackLongPress, cancelLongPress]
   );
 
   // Handle touch/mouse move
@@ -170,9 +158,10 @@ export function useTimelinePointerEvents({
     (e: React.PointerEvent) => {
       // Always update pinch pointers (even if not pinching yet, to track second finger)
       pinchGesture.handlePointerMove(e);
-
-      // If pinching, skip other gesture handling
-      if (pinchGesture.isPinchingRef.current) return;
+      if (pinchGesture.isPinchingRef.current) {
+        cancelLongPress();
+        return;
+      }
 
       // Region editing mode - delegate to hook if handlers provided
       if (timelineMode === 'regions' && handleRegionPointerMove) {
@@ -180,16 +169,23 @@ export function useTimelinePointerEvents({
         return;
       }
 
-      // Navigate mode: update the free-hand selection drag
+      // Navigate mode: pan/scroll
       if (timelineMode === 'navigate') {
-        // Any real movement cancels a pending long-press (it's a drag = loop)
+        // Any real movement cancels the pending long-press (it's a drag = pan)
         if (longPressTimerRef.current) {
           const ldx = Math.abs(e.clientX - longPressPosRef.current.x);
           const ldy = Math.abs(e.clientY - longPressPosRef.current.y);
-          if (ldx > LONG_PRESS_MOVE_CANCEL || ldy > LONG_PRESS_MOVE_CANCEL) {
-            clearTimeout(longPressTimerRef.current);
-            longPressTimerRef.current = null;
-          }
+          if (ldx > LONG_PRESS_MOVE_CANCEL || ldy > LONG_PRESS_MOVE_CANCEL) cancelLongPress();
+        }
+        panGesture.handlePointerMove(e);
+        return;
+      }
+
+      // Regions mode without drag handlers
+      if (timelineMode === 'regions') {
+        if (!selectionModeActive) {
+          panGesture.handlePointerMove(e);
+          return;
         }
         if (dragStart === null || !containerRef.current) return;
         const time = positionToTime(e.clientX);
@@ -199,52 +195,17 @@ export function useTimelinePointerEvents({
           e.clientY < rect.top - VERTICAL_CANCEL_THRESHOLD ||
           e.clientY > rect.bottom + VERTICAL_CANCEL_THRESHOLD;
         setIsCancelled(isOutsideVertically);
-        return;
-      }
-
-      // Regions mode without drag handlers
-      if (timelineMode === 'regions') {
-        if (!selectionModeActive) {
-          // Pan mode - delegate to pan gesture
-          panGesture.handlePointerMove(e);
-          return;
-        }
-        // Selection mode - time selection gesture
-        if (dragStart === null || !containerRef.current) return;
-
-        const time = positionToTime(e.clientX);
-        setDragEnd(time);
-
-        // Check if dragged off timeline (vertical cancel)
-        const rect = containerRef.current.getBoundingClientRect();
-        const isOutsideVertically =
-          e.clientY < rect.top - VERTICAL_CANCEL_THRESHOLD ||
-          e.clientY > rect.bottom + VERTICAL_CANCEL_THRESHOLD;
-
-        if (isOutsideVertically) {
-          setIsCancelled(true);
-        } else {
-          setIsCancelled(false);
-        }
       }
     },
-    [dragStart, positionToTime, timelineMode, handleRegionPointerMove, selectionModeActive, panGesture, pinchGesture, containerRef]
+    [dragStart, positionToTime, timelineMode, handleRegionPointerMove, selectionModeActive, panGesture, pinchGesture, containerRef, cancelLongPress]
   );
 
   // Handle touch/mouse end
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      // Check if we were pinching BEFORE processing the pointer up
       const wasPinching = pinchGesture.isPinchingRef.current;
-
-      // Always track pinch pointer removal
       pinchGesture.handlePointerUp(e);
-
-      // If we were pinching, don't process as tap/other gesture
-      // This handles both "still pinching" (2+ fingers) and "pinch just ended" (1 finger lifted)
-      if (wasPinching) {
-        return;
-      }
+      if (wasPinching) return;
 
       // Region editing mode - delegate to hook if handlers provided
       if (timelineMode === 'regions' && handleRegionPointerUp) {
@@ -252,80 +213,35 @@ export function useTimelinePointerEvents({
         return;
       }
 
-      // Navigate mode: commit free-hand time selection (no snap), or tap = item
+      // Navigate mode: finish pan; tap = item; long-press already opened FX
       if (timelineMode === 'navigate') {
-        // Long-press already handled (opened FX) — swallow this pointerup
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
+        cancelLongPress();
+        panGesture.handlePointerUp(e);
+
         if (longPressFiredRef.current) {
           longPressFiredRef.current = false;
-          setDragStart(null);
-          setDragEnd(null);
-          setIsCancelled(false);
           panStartPositionRef.current = null;
-          try {
-            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-          } catch {
-            // Pointer capture already released
-          }
           return;
         }
 
-        if (dragStart === null) return;
-
-        const endTime = positionToTime(e.clientX);
-        const wasDraggingHorizontally = Math.abs(endTime - dragStart) > 0.1;
-
-        const rect = containerRef.current?.getBoundingClientRect();
-        const isOutsideVertically = rect && (
-          e.clientY < rect.top - VERTICAL_CANCEL_THRESHOLD ||
-          e.clientY > rect.bottom + VERTICAL_CANCEL_THRESHOLD
-        );
-        const startPos = panStartPositionRef.current;
-
-        if (isCancelled || isOutsideVertically) {
-          // Cancelled - do nothing
-        } else if (wasDraggingHorizontally) {
-          // Free-hand time selection - no snapping to grid/boundaries
-          const selStart = Math.min(dragStart, endTime);
-          const selEnd = Math.max(dragStart, endTime);
-          setTimeSelection(selStart, selEnd);
-        } else if (startPos) {
-          // Tap (no horizontal movement) = select item under finger
-          const dx = Math.abs(e.clientX - startPos.x);
-          const dy = Math.abs(e.clientY - startPos.y);
+        if (panStartPositionRef.current) {
+          const dx = Math.abs(e.clientX - panStartPositionRef.current.x);
+          const dy = Math.abs(e.clientY - panStartPositionRef.current.y);
           if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
             handleItemTap(e.clientX, e.clientY);
           }
         }
-
-        // Reset state
-        setDragStart(null);
-        setDragEnd(null);
-        setIsCancelled(false);
         panStartPositionRef.current = null;
-
-        try {
-          (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-        } catch {
-          // Pointer capture already released
-        }
         return;
       }
 
       // Regions mode without drag handlers - original pan/tap or selection behavior
       if (timelineMode === 'regions') {
         if (!selectionModeActive) {
-          // Pan mode - delegate to pan gesture
           panGesture.handlePointerUp(e);
-
-          // Check if it was a tap (minimal movement) - if so, check for item/region hit
           if (panStartPositionRef.current) {
             const dx = Math.abs(e.clientX - panStartPositionRef.current.x);
             const dy = Math.abs(e.clientY - panStartPositionRef.current.y);
-
             if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
               if (onRegionTap) {
                 onRegionTap(e.clientX, e.clientY);
@@ -334,17 +250,14 @@ export function useTimelinePointerEvents({
               }
             }
           }
-
           panStartPositionRef.current = null;
           return;
         }
 
         // Selection mode - time selection gesture (boundary-snapped)
         if (dragStart === null) return;
-
         const endTime = positionToTime(e.clientX);
         const wasDraggingHorizontally = Math.abs(endTime - dragStart) > 0.1;
-
         const rect = containerRef.current?.getBoundingClientRect();
         const isOutsideVertically = rect && (
           e.clientY < rect.top - VERTICAL_CANCEL_THRESHOLD ||
@@ -364,7 +277,6 @@ export function useTimelinePointerEvents({
         setDragStart(null);
         setDragEnd(null);
         setIsCancelled(false);
-
         try {
           (e.target as HTMLElement).releasePointerCapture(e.pointerId);
         } catch {
@@ -387,20 +299,16 @@ export function useTimelinePointerEvents({
       handleItemTap,
       onRegionTap,
       containerRef,
+      cancelLongPress,
     ]
   );
 
-  // Calculate selection preview bounds (free-hand, no snapping)
+  // Selection preview (regions mode only — navigate has no canvas selection)
   const selectionPreview = useMemo(() => {
     if (dragStart === null || dragEnd === null) return null;
-    // Don't show if cancelled or no horizontal movement
     if (isCancelled) return null;
     if (Math.abs(dragEnd - dragStart) <= 0.1) return null;
-
-    const start = Math.min(dragStart, dragEnd);
-    const end = Math.max(dragStart, dragEnd);
-
-    return { start, end };
+    return { start: Math.min(dragStart, dragEnd), end: Math.max(dragStart, dragEnd) };
   }, [dragStart, dragEnd, isCancelled]);
 
   return {
