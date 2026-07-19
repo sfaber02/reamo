@@ -89,11 +89,15 @@ export function MixerView(): ReactElement {
     );
   }, [availableHeight, isLandscape]);
 
-  // Responsive channel count - accounts for pinned master taking space
-  const { channelCount } = useResponsiveChannelCount({
+  // Responsive channel count (kept for layout hints)
+  const { channelCount: responsiveChannelCount } = useResponsiveChannelCount({
     containerRef,
     masterPinned: pinMasterTrack,
   });
+  // Show ALL tracks in a single, horizontally-scrollable bank (no bank paging).
+  // Making the "bank" large enough to hold every track collapses paging to one
+  // page; the strip row scrolls to reach tracks that don't fit on screen.
+  const channelCount = Math.max(responsiveChannelCount, totalTracks + 2);
 
   // Bank navigation - include master in banks when not pinned
   const {
@@ -591,11 +595,11 @@ export function MixerView(): ReactElement {
       {/* Main mixer area - containerRef for height/width measurement */}
       <div
         ref={containerRef}
-        className="h-full flex items-center justify-center gap-2 relative overflow-hidden pb-3"
+        className="h-full flex items-center justify-start gap-2 relative overflow-x-auto overflow-y-hidden pb-3"
       >
         {/* Master track - pinned on left when enabled */}
         {pinMasterTrack && (
-          <div className="border-r pr-2 border-border-subtle">
+          <div className="sticky left-0 z-10 bg-bg-app border-r pr-2 border-border-subtle">
             {hasTrackData(0) ? (
               isLandscape ? (
                 <MixerStripCompact
