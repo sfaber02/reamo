@@ -81,9 +81,6 @@ export function TimelinePlayhead({
   isSyncing,
   isDraggingPlayhead,
   renderTimeToPercent,
-  handlePlayheadPointerDown,
-  handlePlayheadPointerMove,
-  handlePlayheadPointerUp,
 }: TimelinePlayheadProps): ReactElement | null {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -128,18 +125,13 @@ export function TimelinePlayhead({
         style={{ backgroundColor: timelineMode === 'regions' ? 'var(--color-text-muted)' : 'var(--color-playhead)' }}
       />
 
-      {/* Grab handle - inverted triangle at top, above everything */}
+      {/* Position indicator - inverted triangle at top. Display-only: the playhead
+          is moved by tapping the ruler, not by dragging this handle. */}
       <div
-        className={`absolute -top-0.5 -left-[11px] w-6 h-6 z-30 ${
-          timelineMode === 'regions'
-            ? 'pointer-events-none opacity-40'
-            : 'cursor-grab active:cursor-grabbing'
+        className={`absolute -top-0.5 -left-[11px] w-6 h-6 z-30 pointer-events-none ${
+          timelineMode === 'regions' ? 'opacity-40' : ''
         }`}
         style={{ touchAction: 'none' }}
-        onPointerDown={timelineMode === 'regions' ? undefined : handlePlayheadPointerDown}
-        onPointerMove={timelineMode === 'regions' ? undefined : handlePlayheadPointerMove}
-        onPointerUp={timelineMode === 'regions' ? undefined : handlePlayheadPointerUp}
-        onPointerCancel={timelineMode === 'regions' ? undefined : handlePlayheadPointerUp}
       >
         {/* Inverted triangle (pointing down) */}
         <div

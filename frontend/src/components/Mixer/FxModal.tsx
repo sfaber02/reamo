@@ -21,6 +21,11 @@ export interface FxModalProps {
   onClose: () => void;
   /** Track index to show FX for */
   trackIndex: number;
+  /** Optional GUID override — use when opening from a context that hasn't
+   *  subscribed the track into the tracks store (e.g. timeline double-tap). */
+  overrideGuid?: string;
+  /** Optional display-name override, paired with overrideGuid. */
+  overrideName?: string;
   /** Called when user wants to add FX */
   onAddFx?: () => void;
   /** Called when user taps an FX row to edit params */
@@ -195,11 +200,15 @@ export function FxModal({
   isOpen,
   onClose,
   trackIndex,
+  overrideGuid,
+  overrideName,
   onAddFx,
   onOpenFxParams,
 }: FxModalProps): ReactElement {
   const { sendCommand } = useReaper();
-  const { name: trackName, isFxDisabled, guid } = useTrack(trackIndex);
+  const { name: hookName, isFxDisabled, guid: hookGuid } = useTrack(trackIndex);
+  const guid = overrideGuid ?? hookGuid;
+  const trackName = overrideName ?? hookName;
 
   // Use subscription-based FX chain data from store
   const fxChainList = useReaperStore((s) => s.fxChainList);

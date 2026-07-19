@@ -21,6 +21,7 @@ import {
   ContextRail,
   type ContextRailTabConfig,
 } from './components';
+import { FxViewHost } from './components/Mixer/FxViewHost';
 import { Info, Wrench } from 'lucide-react';
 import { useUIPreferences, useTransport, useLayoutContext } from './hooks';
 import { useReaperStore } from './store';
@@ -199,6 +200,7 @@ function AppContent() {
         {/* Centralized modal rendering */}
         <ModalRoot />
         <ToastRoot />
+        <FxViewHost />
       </div>
     );
   }
@@ -243,6 +245,7 @@ function AppContent() {
       {/* Centralized modal rendering */}
       <ModalRoot />
       <ToastRoot />
+      <FxViewHost />
     </div>
   );
 }

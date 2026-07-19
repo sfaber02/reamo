@@ -28,6 +28,7 @@ import { createRoutingSlice, type RoutingSlice } from './slices/routingSlice';
 import { createFxChainSlice, type FxChainSlice } from './slices/fxChainSlice';
 import { createFxBrowserSlice, type FxBrowserSlice } from './slices/fxBrowserSlice';
 import { createFxParamSlice, type FxParamSlice } from './slices/fxParamSlice';
+import { createFxViewSlice, type FxViewSlice } from './slices/fxViewSlice';
 import { createSecondaryPanelSlice, type SecondaryPanelSlice } from './slices/secondaryPanelSlice';
 import { createSideRailSlice, type SideRailSlice } from './slices/sideRailSlice';
 import { createToastSlice, type ToastSlice } from './slices/toastSlice';
@@ -90,7 +91,7 @@ import { transportEngine } from '../core/TransportAnimationEngine';
 import { transportSyncEngine } from '../core/TransportSyncEngine';
 
 // Combined store type
-export type ReaperStore = ConnectionSlice & TransportSlice & ProjectSlice & TracksSlice & RegionsSlice & MarkersSlice & RegionEditSlice & ItemsSlice & ToolbarSlice & ActionsSlice & StudioLayoutState & NotesSlice & PlaylistSlice & ActionsViewSlice & ClockViewSlice & FxStateSlice & SendsStateSlice & UIPreferencesState & ModalSlice & PeaksSlice & RoutingSlice & FxChainSlice & FxBrowserSlice & FxParamSlice & SecondaryPanelSlice & SideRailSlice & ToastSlice & TimelineViewSlice & ViewFilterSlice & TunerSlice & AudioMonitorSlice & {
+export type ReaperStore = ConnectionSlice & TransportSlice & ProjectSlice & TracksSlice & RegionsSlice & MarkersSlice & RegionEditSlice & ItemsSlice & ToolbarSlice & ActionsSlice & StudioLayoutState & NotesSlice & PlaylistSlice & ActionsViewSlice & ClockViewSlice & FxStateSlice & SendsStateSlice & UIPreferencesState & ModalSlice & PeaksSlice & RoutingSlice & FxChainSlice & FxBrowserSlice & FxParamSlice & FxViewSlice & SecondaryPanelSlice & SideRailSlice & ToastSlice & TimelineViewSlice & ViewFilterSlice & TunerSlice & AudioMonitorSlice & {
   // Response handler action (legacy HTTP)
   handleResponses: (responses: ParsedResponse[]) => void;
   // WebSocket message handler
@@ -131,6 +132,7 @@ export const useReaperStore = create<ReaperStore>()((set, get, store) => ({
   ...createFxChainSlice(set, get, store),
   ...createFxBrowserSlice(set, get, store),
   ...createFxParamSlice(set, get, store),
+  ...createFxViewSlice(set, get, store),
   ...createSecondaryPanelSlice(set, get, store),
   ...createSideRailSlice(set, get, store),
   ...createToastSlice(set, get, store),

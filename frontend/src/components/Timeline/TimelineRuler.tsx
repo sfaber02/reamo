@@ -14,8 +14,8 @@
  * Uses unified tick generator for consistent alignment with grid lines.
  */
 
-import type { ReactElement } from 'react';
-import { useMemo, useCallback, memo } from 'react';
+import type { ReactElement, PointerEvent as ReactPointerEvent } from 'react';
+import { useMemo, useCallback, useRef, memo } from 'react';
 import { generateTimelineTicks, formatRulerTime, type TimelineTick } from '../../utils/timelineTicks';
 import type { WSTempoMarker } from '../../core/WebSocketTypes';
 import { useLongPress } from '../../hooks/useLongPress';
@@ -48,7 +48,7 @@ const RulerLabeledTick = memo(function RulerLabeledTick({
   return (
     <div
       key={tick.key}
-      className="absolute top-0 bottom-0 flex flex-col select-none touch-none"
+      className="absolute top-0 bottom-0 flex flex-col select-none touch-none pointer-events-none"
       style={{ left: `${leftPercent}%` }}
       {...handlers}
     >
@@ -94,6 +94,21 @@ export function TimelineRuler({
   timesigDenom,
 }: Props): ReactElement {
   const { sendCommand } = useReaper();
+  const rulerRef = useRef<HTMLDivElement>(null);
+
+  // Tap anywhere on the ruler seeks the playhead to that position (free-hand, no snap).
+  const handleRulerTap = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const el = rulerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0) return;
+      const ratio = (e.clientX - rect.left) / rect.width;
+      const time = visibleRange.start + ratio * visibleDuration;
+      sendCommand(transport.seek(Math.max(0, time)));
+    },
+    [sendCommand, visibleRange.start, visibleDuration]
+  );
 
   const ticks = useMemo(
     () =>
@@ -121,9 +136,11 @@ export function TimelineRuler({
 
   return (
     <div
+      ref={rulerRef}
       data-testid="timeline-ruler"
-      className="relative h-[32px] bg-bg-deep rounded-t-lg overflow-hidden"
-      aria-hidden="true"
+      className="relative h-[32px] bg-bg-deep rounded-t-lg overflow-hidden cursor-pointer touch-none select-none"
+      onPointerDown={handleRulerTap}
+      aria-label="Timeline ruler — tap to move playhead"
     >
       {ticks.map((tick) => {
         const leftPercent = renderTimeToPercent(tick.time);

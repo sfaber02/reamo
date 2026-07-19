@@ -5,6 +5,7 @@
 
 import { useRef, useCallback, useMemo, type ReactElement } from 'react';
 import { useReaper } from '../ReaperProvider';
+import { useReaperStore } from '../../store';
 import {
   useTimeSignature,
   useBarOffset,
@@ -261,6 +262,28 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
     [regions, positionToTime, isRegionSelected, selectRegion, deselectRegion, containerRef]
   );
 
+  // Long-press a track lane to open that track's FX view
+  const openFxView = useReaperStore((s) => s.openFxView);
+  const handleTrackLongPress = useCallback(
+    (_clientX: number, clientY: number) => {
+      const el = containerRef.current;
+      if (!el || !multiTrackLanes || multiTrackLanes.length === 0 || !multiTrackIndices) return;
+      const rect = el.getBoundingClientRect();
+      const laneHeight = rect.height / multiTrackLanes.length;
+      const laneIdx = Math.floor((clientY - rect.top) / laneHeight);
+      if (laneIdx < 0 || laneIdx >= multiTrackLanes.length) return;
+      const guid = multiTrackLanes[laneIdx]?.g;
+      const trackIndex = multiTrackIndices[laneIdx];
+      if (!guid || trackIndex === undefined) return;
+      openFxView({
+        trackIndex,
+        trackGuid: guid,
+        trackName: multiTrackLanes[laneIdx]?.n || `Track ${trackIndex}`,
+      });
+    },
+    [containerRef, multiTrackLanes, multiTrackIndices, openFxView]
+  );
+
   // Pointer event routing
   const { handlePointerDown, handlePointerMove, handlePointerUp, selectionPreview } =
     useTimelinePointerEvents({
@@ -278,6 +301,7 @@ export function Timeline({ className = '', height = 120, isSyncing = false, view
       setTimeSelection,
       navigateTo,
       findNearestBoundary,
+      onTrackLongPress: handleTrackLongPress,
     });
 
   // Marker drag hook
