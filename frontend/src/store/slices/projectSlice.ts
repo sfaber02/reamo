@@ -15,6 +15,9 @@ export interface ProjectSlice {
   // Project name - filename of current project (e.g., "My Song.rpp")
   projectName: string;
 
+  // Project length in seconds (authoritative, from REAPER)
+  projectLength: number;
+
   // Project dirty state - true when project has unsaved changes
   isProjectDirty: boolean;
 
@@ -39,6 +42,7 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set) => ({
   reaperCanUndo: null,
   reaperCanRedo: null,
   projectName: '',
+  projectLength: 0,
   isProjectDirty: false,
   memoryWarning: false,
   memoryWarningDismissed: false,

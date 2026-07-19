@@ -300,8 +300,12 @@ export function TimelineView(): ReactElement {
   const effectiveCanGoForward = isFiltered ? filterBankIndex < filteredTotalBanks - 1 : canGoForward;
 
   // Calculate project duration from content (needed for viewport)
+  // Authoritative project length from REAPER (falls back to content-derived below)
+  const projectLength = useReaperStore((s) => s.projectLength);
   const projectDuration = useMemo(() => {
-    let end = 0;
+    // Start from REAPER's reported project length so the timeline isn't capped by
+    // whatever items happen to be loaded (item metadata can be partial/viewport-scoped)
+    let end = projectLength;
 
     for (const region of regions) {
       if (region.end > end) end = region.end;
@@ -318,7 +322,7 @@ export function TimelineView(): ReactElement {
 
     // Add 5% padding at the end, minimum 30 seconds
     return Math.max(end * 1.05, 30);
-  }, [regions, markers, items, positionSeconds]);
+  }, [projectLength, regions, markers, items, positionSeconds]);
 
   // Shared viewport state (needed for peaks subscription)
   // Use saved viewport from store if available (persists across view switches)

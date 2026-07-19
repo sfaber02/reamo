@@ -297,6 +297,7 @@ export const useReaperStore = create<ReaperStore>()((set, get, store) => ({
         masterStereo: p.master.stereoEnabled,
         barOffset: p.barOffset,
         recordMode,
+        projectLength: p.projectLength ?? 0,
       });
     } else if (isTrackSkeletonEvent(message)) {
       // Track skeleton: lightweight list of all tracks (name + GUID)
