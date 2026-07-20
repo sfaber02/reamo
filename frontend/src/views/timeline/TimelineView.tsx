@@ -101,6 +101,8 @@ export function TimelineView(): ReactElement {
   // Viewport persistence - restore saved viewport across view switches
   const savedViewport = useReaperStore((s) => s.savedViewport);
   const saveViewport = useReaperStore((s) => s.saveViewport);
+  const clearSavedViewport = useReaperStore((s) => s.clearSavedViewport);
+  const projectName = useReaperStore((s) => s.projectName);
 
   const { positionSeconds } = useTransport();
 
@@ -342,6 +344,22 @@ export function TimelineView(): ReactElement {
     }, 300); // 300ms debounce
     return () => clearTimeout(timer);
   }, [viewport.visibleRange, saveViewport]);
+
+  // Re-fit the viewport to the whole project when the project changes.
+  // TimelineView is a persistent view (it does NOT remount between project
+  // switches), and useViewport only reads its initial range at mount — so
+  // without this, switching projects keeps the previous project's viewport,
+  // making a longer project look capped at the old range. projectName and
+  // projectLength arrive together in the same project event, so projectDuration
+  // is already correct for the new project here.
+  const prevProjectNameRef = useRef(projectName);
+  useEffect(() => {
+    if (projectName !== prevProjectNameRef.current) {
+      prevProjectNameRef.current = projectName;
+      clearSavedViewport();
+      viewport.setVisibleRange({ start: 0, end: projectDuration });
+    }
+  }, [projectName, projectDuration, viewport, clearSavedViewport]);
 
   // Track timeline container width for adaptive peak resolution
   const timelineContainerRef = useRef<HTMLDivElement>(null);
