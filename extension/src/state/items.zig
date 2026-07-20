@@ -362,9 +362,18 @@ pub const State = struct {
     }
 
     // Allocator-based version - returns owned slice from allocator
-    // Allocates from arena instead of stack to avoid stack overflow in timer callbacks
+    // Allocates from arena instead of stack to avoid stack overflow in timer callbacks.
+    //
+    // The buffer is sized to the item count. A fixed 32KB buffer silently overflowed
+    // (itemsToJson returns null -> whole "items" event dropped) on dense projects,
+    // leaving the timeline with no item rectangles or waveforms. Worst-case per item:
+    // fixed fields (~256B) + escaped take name (2*MAX_NAME_LEN) + GUIDs (~80B) ~= 650B;
+    // budget 768B/item plus 8KB base for headroom. At MAX_ITEMS (512) this is ~400KB,
+    // well within the scratch arena (>=2.5MB).
     pub fn itemsToJsonAlloc(self: *const State, allocator: std.mem.Allocator) ![]const u8 {
-        const buf = try allocator.alloc(u8, 32768);
+        const per_item: usize = 768;
+        const buf_size: usize = 8192 + self.items.len * per_item;
+        const buf = try allocator.alloc(u8, buf_size);
         const json = self.itemsToJson(buf) orelse return error.JsonSerializationFailed;
         return json;
     }

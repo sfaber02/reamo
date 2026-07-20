@@ -14,8 +14,9 @@ Transport, mixer, timeline, tuner, instruments, notes — all from your phone or
 
 ## Changes in this fork
 
-Frontend-only tweaks aimed at operating REAPER hands-on from a vocal booth. The Zig
-extension/backend is untouched — rebuild with `make frontend` and reload REAPER.
+Tweaks aimed at operating REAPER hands-on from a vocal booth. Most changes are
+frontend-only (rebuild with `make frontend` and restart REAPER), plus one backend
+bug fix (see below) that requires rebuilding the Zig extension.
 
 - **Timeline ruler = tap-to-seek.** Tap anywhere on the ruler to move the playhead there.
   The playhead handle is now a display-only indicator (no more fiddly drag-to-grab).
@@ -28,6 +29,13 @@ extension/backend is untouched — rebuild with `make frontend` and reload REAPE
   or its **name in the mixer** — to open that track's FX chain (bypass, presets, per-plugin
   parameter editing, add FX). No more digging through nested menus. Backed by a small global
   `fxView` store slice + `FxViewHost`, so the FX view can be summoned from anywhere.
+- **Backend fix: dense projects showed no items/waveforms.** `itemsToJsonAlloc`
+  (`extension/src/state/items.zig`) serialized all items into a fixed **32 KB** buffer;
+  once the JSON exceeded that (roughly ~90–100 items, e.g. long/comped sessions), the
+  write failed and the *entire* `items` event was silently dropped — so the timeline
+  rendered no item rectangles and no waveforms. The buffer is now sized to the item
+  count (768 B/item + 8 KB base). Requires rebuilding the extension: `make extension`
+  (needs **zig ≥ 0.15.0**).
 
 ## Quick Start
 
