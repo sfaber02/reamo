@@ -6,12 +6,12 @@
 
 import type { ReactElement } from 'react';
 import { useState, useRef, useCallback } from 'react';
-import { SkipBack, Play, Pause, Square } from 'lucide-react';
+import { SkipBack, Play, Pause, Square, Repeat } from 'lucide-react';
 import { useReaper } from '../ReaperProvider';
 import { useTransport } from '../../hooks/useTransport';
 import { useReaperStore } from '../../store';
 import { useRecordButton } from '../../hooks/useRecordButton';
-import { transport } from '../../core/WebSocketCommands';
+import { transport, repeat } from '../../core/WebSocketCommands';
 import { useTransportAnimation, useDoubleTap, useLongPress } from '../../hooks';
 import { formatTime } from '../../utils';
 import { QuickActionsPanel } from './QuickActionsPanel';
@@ -30,6 +30,7 @@ export function PersistentTransport({ className = '', position = 'left' }: Persi
   const { sendCommand } = useReaper();
   const { isPlaying, isPaused, isStopped, isRecording, play, pause, stop } = useTransport();
   const bpm = useReaperStore((state) => state.bpm);
+  const isRepeat = useReaperStore((state) => state.isRepeat);
   const timeSignatureNumerator = useReaperStore((state) => state.timeSignatureNumerator);
   const timeSignatureDenominator = useReaperStore((state) => state.timeSignatureDenominator);
   const { pointerHandlers, recordMode } = useRecordButton();
@@ -56,6 +57,7 @@ export function PersistentTransport({ className = '', position = 'left' }: Persi
   const handlePlay = () => sendCommand(play());
   const handlePause = () => sendCommand(pause());
   const handleStop = () => sendCommand(stop());
+  const handleToggleRepeat = () => sendCommand(repeat.toggle());
 
   // Double-tap handler for Quick Actions Panel
   const { onClick: handleDoubleTapCheck } = useDoubleTap({
@@ -124,6 +126,17 @@ export function PersistentTransport({ className = '', position = 'left' }: Persi
           size="sm"
         >
           <Square size={14} fill={isStopped ? 'currentColor' : 'none'} />
+        </CircularTransportButton>
+
+        {/* Loop / repeat toggle - green when on; tap to disable looping */}
+        <CircularTransportButton
+          onClick={handleToggleRepeat}
+          isActive={isRepeat}
+          activeColor="green"
+          title={isRepeat ? 'Loop: on (tap to disable)' : 'Loop: off (tap to enable)'}
+          size="sm"
+        >
+          <Repeat size={16} />
         </CircularTransportButton>
 
         {/* Record - with long-press for record mode cycling */}
