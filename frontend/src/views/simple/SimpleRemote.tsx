@@ -13,7 +13,7 @@
  */
 
 import { useMemo, useRef, useState, useCallback, type ReactElement, type PointerEvent } from 'react';
-import { SkipBack, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
+import { SkipBack, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X, Plus, Rewind, FastForward } from 'lucide-react';
 import { useReaper } from '../../components/ReaperProvider';
 import { useTransport } from '../../hooks/useTransport';
 import { useTransportAnimation, getTransportAnimationState } from '../../hooks';
@@ -69,8 +69,8 @@ export function SimpleRemote(): ReactElement {
   // The store's positionSeconds does NOT update during playback (only tick events
   // do, and those feed the animation engine, not the store). So drive the live
   // elements directly from the engine via refs, no React re-render per frame.
-  const beatsRef = useRef<HTMLDivElement>(null);
-  const timeRef = useRef<HTMLSpanElement>(null);
+  const beatsRef = useRef<HTMLSpanElement>(null);
+  const timeRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
   const markerNameRef = useRef<HTMLDivElement>(null);
@@ -166,6 +166,16 @@ export function SimpleRemote(): ReactElement {
     sendCommand(marker.add(getTransportAnimationState().position, name));
   }, [sendCommand]);
 
+  // Scrub the play cursor by a relative amount (seconds), clamped to the project.
+  const scrubBy = useCallback(
+    (deltaSeconds: number) => {
+      const pos = getTransportAnimationState().position;
+      const target = Math.min(durationRef.current, Math.max(0, pos + deltaSeconds));
+      sendCommand(transport.seek(target));
+    },
+    [sendCommand]
+  );
+
   // Loop band (committed selection) shown on the bar.
   const loopBand = loopSel && loopSel.endSeconds > loopSel.startSeconds
     ? { left: (loopSel.startSeconds / duration) * 100, width: ((loopSel.endSeconds - loopSel.startSeconds) / duration) * 100 }
@@ -183,12 +193,13 @@ export function SimpleRemote(): ReactElement {
 
       {/* Big time readout */}
       <div className="px-4 pt-1 pb-3 text-center">
-        <div ref={beatsRef} className="text-5xl font-bold tabular-nums tracking-tight text-text-primary">
-          {positionBeats}
+        <div ref={timeRef} className="text-6xl font-bold tabular-nums tracking-tight text-text-primary">
+          {formatTime(positionSeconds, { precision: 0, showSign: false })}
         </div>
         <div className="mt-1 text-sm text-text-secondary tabular-nums">
-          <span ref={timeRef}>{formatTime(positionSeconds, { precision: 0, showSign: false })}</span>
-          <span className="text-text-muted"> / {formatTime(duration, { precision: 0, showSign: false })}</span>
+          <span ref={beatsRef}>{positionBeats}</span>
+          <span className="mx-2 text-text-muted">·</span>
+          <span className="text-text-muted">{formatTime(duration, { precision: 0, showSign: false })}</span>
           <span className="mx-2 text-text-muted">·</span>
           {Math.round(bpm ?? 120)} BPM
           <span className="mx-2 text-text-muted">·</span>
@@ -354,8 +365,16 @@ export function SimpleRemote(): ReactElement {
           </TransportButton>
         </div>
 
-        {/* Loop toggle */}
-        <div className="mt-3 flex justify-center">
+        {/* Scrub −10s · Loop · Scrub +10s */}
+        <div className="mt-3 flex items-center justify-center gap-3">
+          <button
+            onClick={() => scrubBy(-10)}
+            aria-label="Back 10 seconds"
+            className="flex items-center gap-1 rounded-full px-4 h-11 text-sm font-medium bg-bg-elevated text-text-secondary active:bg-bg-hover"
+          >
+            <Rewind size={16} fill="currentColor" /> 10s
+          </button>
+
           <button
             onClick={() => sendCommand(repeat.toggle())}
             aria-pressed={isRepeat}
@@ -365,6 +384,14 @@ export function SimpleRemote(): ReactElement {
           >
             <Repeat size={18} />
             {isRepeat ? 'Loop on' : 'Loop off'}
+          </button>
+
+          <button
+            onClick={() => scrubBy(10)}
+            aria-label="Forward 10 seconds"
+            className="flex items-center gap-1 rounded-full px-4 h-11 text-sm font-medium bg-bg-elevated text-text-secondary active:bg-bg-hover"
+          >
+            10s <FastForward size={16} fill="currentColor" />
           </button>
         </div>
       </div>
