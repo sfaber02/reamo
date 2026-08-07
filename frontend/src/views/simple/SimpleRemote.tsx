@@ -13,9 +13,10 @@
  */
 
 import { useMemo, useRef, useState, useCallback, type ReactElement, type PointerEvent } from 'react';
-import { SkipBack, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { SkipBack, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
 import { useReaper } from '../../components/ReaperProvider';
 import { useTransport } from '../../hooks/useTransport';
+import { useTransportAnimation, getTransportAnimationState } from '../../hooks';
 import { useReaperStore } from '../../store';
 import { transport, marker, repeat, timeSelection } from '../../core/WebSocketCommands';
 import { formatTime } from '../../utils';
@@ -63,6 +64,38 @@ export function SimpleRemote(): ReactElement {
     }
     return found;
   }, [sortedMarkers, positionSeconds]);
+
+  // --- Live 60fps position (time / beats / playhead) ---
+  // The store's positionSeconds does NOT update during playback (only tick events
+  // do, and those feed the animation engine, not the store). So drive the live
+  // elements directly from the engine via refs, no React re-render per frame.
+  const beatsRef = useRef<HTMLDivElement>(null);
+  const timeRef = useRef<HTMLSpanElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
+  const fillRef = useRef<HTMLDivElement>(null);
+  const markerNameRef = useRef<HTMLDivElement>(null);
+  // Latest values the rAF callback needs, without re-subscribing every render.
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const sortedMarkersRef = useRef(sortedMarkers);
+  sortedMarkersRef.current = sortedMarkers;
+
+  useTransportAnimation((s) => {
+    const dur = durationRef.current;
+    const pct = dur > 0 ? Math.min(1, Math.max(0, s.position / dur)) : 0;
+    if (beatsRef.current) beatsRef.current.textContent = s.positionBeats;
+    if (timeRef.current) timeRef.current.textContent = formatTime(s.position, { precision: 0, showSign: false });
+    if (playheadRef.current) playheadRef.current.style.left = `${pct * 100}%`;
+    if (fillRef.current) fillRef.current.style.width = `${pct * 100}%`;
+    if (markerNameRef.current) {
+      let name = '—';
+      for (const m of sortedMarkersRef.current) {
+        if (m.position <= s.position + 0.05) name = m.name || `Marker ${m.id}`;
+        else break;
+      }
+      markerNameRef.current.textContent = name;
+    }
+  }, []);
 
   // --- Seek bar: tap = seek, drag = paint loop selection ---
   const trackRef = useRef<HTMLDivElement>(null);
@@ -125,6 +158,14 @@ export function SimpleRemote(): ReactElement {
 
   const clearLoop = useCallback(() => sendCommand(timeSelection.clear()), [sendCommand]);
 
+  // One-tap marker at the current cursor, named with a short date/time (e.g. "8/6 20:52").
+  // Use the animation engine's live position — the store's position lags during playback.
+  const handleAddMarker = useCallback(() => {
+    const now = new Date();
+    const name = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    sendCommand(marker.add(getTransportAnimationState().position, name));
+  }, [sendCommand]);
+
   // Loop band (committed selection) shown on the bar.
   const loopBand = loopSel && loopSel.endSeconds > loopSel.startSeconds
     ? { left: (loopSel.startSeconds / duration) * 100, width: ((loopSel.endSeconds - loopSel.startSeconds) / duration) * 100 }
@@ -142,11 +183,11 @@ export function SimpleRemote(): ReactElement {
 
       {/* Big time readout */}
       <div className="px-4 pt-1 pb-3 text-center">
-        <div className="text-5xl font-bold tabular-nums tracking-tight text-text-primary">
+        <div ref={beatsRef} className="text-5xl font-bold tabular-nums tracking-tight text-text-primary">
           {positionBeats}
         </div>
         <div className="mt-1 text-sm text-text-secondary tabular-nums">
-          {formatTime(positionSeconds, { precision: 0, showSign: false })}
+          <span ref={timeRef}>{formatTime(positionSeconds, { precision: 0, showSign: false })}</span>
           <span className="text-text-muted"> / {formatTime(duration, { precision: 0, showSign: false })}</span>
           <span className="mx-2 text-text-muted">·</span>
           {Math.round(bpm ?? 120)} BPM
@@ -171,7 +212,7 @@ export function SimpleRemote(): ReactElement {
           aria-valuenow={Math.round(positionSeconds)}
         >
           {/* Elapsed fill */}
-          <div className="absolute inset-y-0 left-0 bg-primary/20" style={{ width: `${progress * 100}%` }} />
+          <div ref={fillRef} className="absolute inset-y-0 left-0 bg-primary/20" style={{ width: `${progress * 100}%` }} />
           {/* Committed loop band */}
           {loopBand && (
             <div
@@ -196,6 +237,7 @@ export function SimpleRemote(): ReactElement {
           ))}
           {/* Playhead */}
           <div
+            ref={playheadRef}
             className="absolute top-0 bottom-0 w-1 -ml-0.5 bg-text-primary rounded"
             style={{ left: `${progress * 100}%` }}
           />
@@ -228,7 +270,7 @@ export function SimpleRemote(): ReactElement {
         </button>
         <div className="flex-1 min-w-0 text-center">
           <div className="text-xs text-text-muted">marker</div>
-          <div className="text-lg font-medium truncate">
+          <div ref={markerNameRef} className="text-lg font-medium truncate">
             {currentMarker ? currentMarker.name || `Marker ${currentMarker.id}` : '—'}
           </div>
         </div>
@@ -238,6 +280,18 @@ export function SimpleRemote(): ReactElement {
           aria-label="Next marker"
         >
           <ChevronRight size={28} />
+        </button>
+      </div>
+
+      {/* Marker list header + one-tap add */}
+      <div className="flex items-center justify-between px-4 pb-1.5">
+        <span className="text-xs font-medium uppercase tracking-wide text-text-muted">Markers</span>
+        <button
+          onClick={handleAddMarker}
+          className="flex items-center gap-1.5 rounded-full bg-primary/20 border border-primary/40 px-3 h-9 text-sm font-medium text-primary active:bg-primary/30"
+          aria-label="Add marker at current position"
+        >
+          <Plus size={16} /> Add marker
         </button>
       </div>
 
