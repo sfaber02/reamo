@@ -13,7 +13,7 @@
  */
 
 import { useMemo, useRef, useState, useCallback, type ReactElement, type PointerEvent } from 'react';
-import { SkipBack, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X, Plus, Rewind, FastForward } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Square, Circle, Repeat, ChevronLeft, ChevronRight, X, Plus, Rewind, FastForward } from 'lucide-react';
 import { useReaper } from '../../components/ReaperProvider';
 import { useTransport } from '../../hooks/useTransport';
 import { useTransportAnimation, getTransportAnimationState } from '../../hooks';
@@ -167,12 +167,13 @@ export function SimpleRemote(): ReactElement {
     sendCommand(marker.add(getTransportAnimationState().position, name));
   }, [sendCommand]);
 
-  // Scrub the play cursor by a relative amount (seconds), clamped to the project.
+  // Scrub the play cursor by a relative amount (seconds). Only clamp the low end
+  // at 0 — going PAST the project end is intentional (e.g. go-to-end then +10s a
+  // few times to leave a gap before the next take).
   const scrubBy = useCallback(
     (deltaSeconds: number) => {
       const pos = getTransportAnimationState().position;
-      const target = Math.min(durationRef.current, Math.max(0, pos + deltaSeconds));
-      sendCommand(transport.seek(target));
+      sendCommand(transport.seek(Math.max(0, pos + deltaSeconds)));
     },
     [sendCommand]
   );
@@ -341,9 +342,9 @@ export function SimpleRemote(): ReactElement {
 
       {/* Big transport */}
       <div className="border-t border-border-muted bg-bg-deep px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-1.5">
           <TransportButton onClick={() => sendCommand(transport.goStart())} label="To start">
-            <SkipBack size={26} fill="currentColor" />
+            <SkipBack size={24} fill="currentColor" />
           </TransportButton>
 
           <TransportButton
@@ -356,7 +357,7 @@ export function SimpleRemote(): ReactElement {
           </TransportButton>
 
           <TransportButton onClick={() => sendCommand(transport.stop())} label="Stop">
-            <Square size={24} fill="currentColor" />
+            <Square size={22} fill="currentColor" />
           </TransportButton>
 
           <TransportButton
@@ -364,7 +365,11 @@ export function SimpleRemote(): ReactElement {
             label="Record"
             variant={isRecording ? 'active-red' : 'record'}
           >
-            <Circle size={26} fill="currentColor" />
+            <Circle size={24} fill="currentColor" />
+          </TransportButton>
+
+          <TransportButton onClick={() => sendCommand(transport.goEnd())} label="To end (end of project)">
+            <SkipForward size={24} fill="currentColor" />
           </TransportButton>
         </div>
 
@@ -417,7 +422,7 @@ function TransportButton({
   variant?: TransportVariant;
   big?: boolean;
 }): ReactElement {
-  const size = big ? 'h-20 w-20' : 'h-16 w-16';
+  const size = big ? 'h-20 w-20' : 'h-14 w-14';
   const variantClass: Record<TransportVariant, string> = {
     default: 'bg-bg-elevated text-text-primary active:bg-bg-hover',
     record: 'bg-bg-elevated text-error ring-2 ring-error/40 active:bg-bg-hover',
