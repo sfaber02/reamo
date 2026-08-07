@@ -20,6 +20,7 @@ import { useTransportAnimation, getTransportAnimationState } from '../../hooks';
 import { useReaperStore } from '../../store';
 import { transport, marker, repeat, timeSelection } from '../../core/WebSocketCommands';
 import { formatTime } from '../../utils';
+import { WaveformOverview } from './WaveformOverview';
 
 /** Min pointer travel (px) before a press becomes a loop drag instead of a seek tap. */
 const DRAG_THRESHOLD_PX = 8;
@@ -222,6 +223,8 @@ export function SimpleRemote(): ReactElement {
           aria-valuemax={Math.round(duration)}
           aria-valuenow={Math.round(positionSeconds)}
         >
+          {/* Rough whole-project waveform silhouette (behind everything) */}
+          <WaveformOverview duration={duration} />
           {/* Elapsed fill */}
           <div ref={fillRef} className="absolute inset-y-0 left-0 bg-primary/20" style={{ width: `${progress * 100}%` }} />
           {/* Committed loop band */}
